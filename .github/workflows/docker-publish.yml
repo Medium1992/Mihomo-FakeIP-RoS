@@ -57,8 +57,8 @@ jobs:
             BUILDTIME=${{ steps.buildtime.outputs.BUILDTIME }}
             AMD64VERSION=v1
           tags: |
-            ghcr.io/Medium1992/Mihomo-FakeIP-RoS/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-AMD64_v1
-            medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-AMD64_v1
+            ghcr.io/Medium1992/Mihomo-FakeIP-RoS/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v1
+            medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v1
             
       # --- Build mihomo AMD64_v2---
       - name: Build and push mihomo
@@ -73,8 +73,8 @@ jobs:
             BUILDTIME=${{ steps.buildtime.outputs.BUILDTIME }}
             AMD64VERSION=v2
           tags: |
-            ghcr.io/Medium1992/Mihomo-FakeIP-RoS/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-AMD64_v2
-            medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-AMD64_v2
+            ghcr.io/Medium1992/Mihomo-FakeIP-RoS/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v2
+            medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v2
                         
       # --- Build mihomo AMD64_v3, ARM64, ARM---
       - name: Build and push mihomo
