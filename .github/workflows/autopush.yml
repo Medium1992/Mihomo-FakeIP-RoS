@@ -32,7 +32,7 @@ jobs:
             exit 1
           fi
           echo "Latest stable mihomo tag: $MIHOMO_TAG"
-          echo "MIHOMO_TAG=$MIHOMO_TAG" >> $GITHUB_OUTPUT
+          echo "MIHOMO_TAG=$MIHOMO_TAG" >> $GITHUB_ENV
 
       # 3. Получаем текущий тег из GHCR для latest
       - name: Get current latest tag from Docker Hub
@@ -41,36 +41,34 @@ jobs:
           TAGS=$(curl -s -L "https://hub.docker.com/v2/repositories/medium1992/mihomo-fakeip-ros/tags" | jq -r '.results[].name // empty')
           LATEST_VERSION_TAG=$(echo "$TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
           if [ -z "$LATEST_VERSION_TAG" ]; then
-            echo "No version tag found in Docker Hub, assuming first build"
-            echo "CURRENT_TAG=none" >> $GITHUB_OUTPUT
+            echo "No version tag found in GitHub, assuming first build"
+            echo "CURRENT_TAG=none" >> $GITHUB_ENV
           else
-            echo "Current latest version tag in Docker Hub: $LATEST_VERSION_TAG"
-            echo "CURRENT_TAG=$LATEST_VERSION_TAG" >> $GITHUB_OUTPUT
+            echo "Current latest version tag in GitHub: $LATEST_VERSION_TAG"
+            echo "CURRENT_TAG=$LATEST_VERSION_TAG" >> $GITHUB_ENV
           fi
 
       # 4. Сравниваем теги
       - name: Compare tags
         id: compare
         run: |
-          MIHOMO_TAG="${{ steps.mihomo_tag.outputs.MIHOMO_TAG }}"
-          CURRENT_TAG="${{ steps.current_tag.outputs.CURRENT_TAG }}"
           if [ "$CURRENT_TAG" = "none" ] || [ "$MIHOMO_TAG" != "$CURRENT_TAG" ]; then
             echo "New stable version detected: $MIHOMO_TAG (current: $CURRENT_TAG)"
-            echo "BUILD=true" >> $GITHUB_OUTPUT
-            echo "VERSION=$MIHOMO_TAG" >> $GITHUB_OUTPUT
+            echo "BUILD=true" >> $GITHUB_ENV
+            echo "VERSION=$MIHOMO_TAG" >> $GITHUB_ENV
           else
             echo "No new stable version. mihomo: $MIHOMO_TAG, current: $CURRENT_TAG"
-            echo "BUILD=false" >> $GITHUB_OUTPUT
+            echo "BUILD=false" >> $GITHUB_ENV
           fi
 
       # 5. Устанавливаем Docker Buildx
       - name: Set up Docker Buildx
-        if: steps.compare.outputs.BUILD == 'true'
+        if: $BUILD == 'true'
         uses: docker/setup-buildx-action@v3
 
       # 6. Логинимся в GHCR
       - name: Login to GitHub Container Registry
-        if: steps.compare.outputs.BUILD == 'true'
+        if: $BUILD == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -79,7 +77,7 @@ jobs:
 
       # 7. Логинимся в Docker Hub
       - name: Login to Docker Hub
-        if: steps.compare.outputs.BUILD == 'true'
+        if: $BUILD == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -87,15 +85,14 @@ jobs:
 
       # 8. Устанавливаем переменные
       - name: Set variables
-        if: steps.compare.outputs.BUILD == 'true'
+        if: $BUILD == 'true'
         id: vars
         run: |
-          echo "BUILDTIME=$(date)" >> $GITHUB_OUTPUT
-          echo "VERSION=${{ steps.compare.outputs.VERSION }}" >> $GITHUB_OUTPUT
+          echo "BUILDTIME=$(date)" >> $GITHUB_ENV
 
       # 9. Сборка и пуш AMD64_v1
       - name: Build and push mihomo AMD64_v1
-        if: steps.compare.outputs.BUILD == 'true'
+        if: $BUILD == 'true'
         uses: docker/build-push-action@v4
         with:
           context: ./
@@ -103,16 +100,16 @@ jobs:
           platforms: linux/amd64
           push: true
           build-args: |
-            TAG=${{ steps.vars.outputs.VERSION }}
-            BUILDTIME=${{ steps.vars.outputs.BUILDTIME }}
+            TAG=$VERSION
+            BUILDTIME=$BUILDTIME
             AMD64VERSION=v1
           tags: |
-            ghcr.io/medium1992/mihomo-fakeip-ros:${{ steps.vars.outputs.VERSION }}-amd64_v1
-            medium1992/mihomo-fakeip-ros:${{ steps.vars.outputs.VERSION }}-amd64_v1
+            ghcr.io/medium1992/mihomo-fakeip-ros:$VERSION-amd64_v1
+            medium1992/mihomo-fakeip-ros:$VERSION-amd64_v1
 
       # 10. Сборка и пуш AMD64_v2
       - name: Build and push mihomo AMD64_v2
-        if: steps.compare.outputs.BUILD == 'true'
+        if: $BUILD == 'true'
         uses: docker/build-push-action@v4
         with:
           context: ./
@@ -120,16 +117,16 @@ jobs:
           platforms: linux/amd64
           push: true
           build-args: |
-            TAG=${{ steps.vars.outputs.VERSION }}
-            BUILDTIME=${{ steps.vars.outputs.BUILDTIME }}
+            TAG=$VERSION
+            BUILDTIME=$BUILDTIME
             AMD64VERSION=v2
           tags: |
-            ghcr.io/medium1992/mihomo-fakeip-ros:${{ steps.vars.outputs.VERSION }}-amd64_v2
-            medium1992/mihomo-fakeip-ros:${{ steps.vars.outputs.VERSION }}-amd64_v2
+            ghcr.io/medium1992/mihomo-fakeip-ros:$VERSION-amd64_v2
+            medium1992/mihomo-fakeip-ros:$VERSION-amd64_v2
 
       # 11. Сборка и пуш multi-arch (AMD64_v3) + latest
       - name: Build and push mihomo multi-arch
-        if: steps.compare.outputs.BUILD == 'true'
+        if: $BUILD == 'true'
         uses: docker/build-push-action@v4
         with:
           context: ./
@@ -137,11 +134,11 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           build-args: |
-            TAG=${{ steps.vars.outputs.VERSION }}
-            BUILDTIME=${{ steps.vars.outputs.BUILDTIME }}
+            TAG=$VERSION
+            BUILDTIME=$BUILDTIME
             AMD64VERSION=v3
           tags: |
             ghcr.io/medium1992/mihomo-fakeip-ros:latest
-            ghcr.io/medium1992/mihomo-fakeip-ros:${{ steps.vars.outputs.VERSION }}
+            ghcr.io/medium1992/mihomo-fakeip-ros:$VERSION
             medium1992/mihomo-fakeip-ros:latest
-            medium1992/mihomo-fakeip-ros:${{ steps.vars.outputs.VERSION }}
+            medium1992/mihomo-fakeip-ros:$VERSION
