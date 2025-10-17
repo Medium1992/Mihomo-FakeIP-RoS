@@ -35,16 +35,16 @@ jobs:
           echo "MIHOMO_TAG=$MIHOMO_TAG" >> $GITHUB_OUTPUT
 
       # 3. Получаем текущий тег из GHCR для latest
-      - name: Get current latest tag from GHCR
+      - name: Get current latest tag from Docker Hub
         id: current_tag
         run: |
-          TAGS=$(curl -s -L "https://ghcr.io/v2/medium1992/mihomo-fakeip-ros/tags/list" | jq -r '.tags[]')
+          TAGS=$(curl -s -L "https://hub.docker.com/v2/repositories/medium1992/mihomo-fakeip-ros/tags" | jq -r '.results[].name // empty')
           LATEST_VERSION_TAG=$(echo "$TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
           if [ -z "$LATEST_VERSION_TAG" ]; then
-            echo "No version tag found in GHCR, assuming first build"
+            echo "No version tag found in Docker Hub, assuming first build"
             echo "CURRENT_TAG=none" >> $GITHUB_OUTPUT
           else
-            echo "Current latest version tag in GHCR: $LATEST_VERSION_TAG"
+            echo "Current latest version tag in Docker Hub: $LATEST_VERSION_TAG"
             echo "CURRENT_TAG=$LATEST_VERSION_TAG" >> $GITHUB_OUTPUT
           fi
 
