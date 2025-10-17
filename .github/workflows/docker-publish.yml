@@ -48,8 +48,8 @@ jobs:
       - name: Build and push mihomo
         uses: docker/build-push-action@v4
         with:
-          context: ./mihomo
-          file: ./mihomo/Dockerfile
+          context: ./
+          file: ./dockerfile
           platforms: linux/amd64
           push: true
           build-args: |
@@ -57,15 +57,15 @@ jobs:
             BUILDTIME=${{ steps.buildtime.outputs.BUILDTIME }}
             AMD64VERSION=v1
           tags: |
-            ghcr.io/Medium1992/Mihomo-FakeIP-RoS/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v1
+            ghcr.io/medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v1
             medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v1
             
       # --- Build mihomo AMD64_v2---
       - name: Build and push mihomo
         uses: docker/build-push-action@v4
         with:
-          context: ./mihomo
-          file: ./mihomo/Dockerfile
+          context: ./
+          file: ./dockerfile
           platforms: linux/amd64
           push: true
           build-args: |
@@ -73,15 +73,15 @@ jobs:
             BUILDTIME=${{ steps.buildtime.outputs.BUILDTIME }}
             AMD64VERSION=v2
           tags: |
-            ghcr.io/Medium1992/Mihomo-FakeIP-RoS/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v2
+            ghcr.io/medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v2
             medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}-amd64_v2
                         
       # --- Build mihomo AMD64_v3, ARM64, ARM---
       - name: Build and push mihomo
         uses: docker/build-push-action@v4
         with:
-          context: ./mihomo
-          file: ./mihomo/Dockerfile
+          context: ./
+          file: ./dockerfile
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           build-args: |
@@ -89,7 +89,7 @@ jobs:
             BUILDTIME=${{ steps.buildtime.outputs.BUILDTIME }}
             AMD64VERSION=v3
           tags: |
-            ghcr.io/Medium1992/Mihomo-FakeIP-RoS/mihomo-fakeip-ros:latest
-            ghcr.io/Medium1992/Mihomo-FakeIP-RoS/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}
+            ghcr.io/medium1992/mihomo-fakeip-ros:latest
+            ghcr.io/medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}
             medium1992/mihomo-fakeip-ros:latest
             medium1992/mihomo-fakeip-ros:${{ steps.mihomo_version.outputs.VERSION }}
