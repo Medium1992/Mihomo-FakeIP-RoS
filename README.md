@@ -9,16 +9,19 @@ This example demonstrates how to integrate the `mihomo-fakeip-ros` container wit
 
 ```bash
 /interface/veth/add name=fakeip address=192.168.255.1/31 gateway=192.168.255.0
+```
 
 ### 2. Assign the interface address to MikroTik
 
 ```bash
 /ip/address/add address=192.168.255.0/31 interface=fakeip
+```
 
 ### 3. Create DNS forwarders with the container’s IP address
 
 ```bash
 /ip/dns/forwarders/add name=fakeip dns-servers=192.168.255.1 verify-doh-cert=no
+```
 
 ### 4. Add environment variables
 
@@ -35,16 +38,19 @@ Customize these environment variables as needed to control the fake IP behavior 
 add key=FAKE_IP_RANGE list=fakeip value=198.18.0.0/15
 add key=LOGLEVEL list=fakeip value=silent
 add key=TTL_FAKEIP list=fakeip value=1
+```
 
 ### 5. Pull and run the container
 
 ```bash
 /container/add remote-image="ghcr.io/medium1992/mihomo-fakeip-ros" envlists=fakeip interface=fakeip root-dir=Containers/fakeip start-on-boot=yes
+```
 
 or
 
 ```bash
 /container/add remote-image="registry-1.docker.io/medium1992/mihomo-fakeip-ros" envlists=fakeip interface=fakeip root-dir=Containers/fakeip start-on-boot=yes
+```
 
 > **Note**: For AMD v1 or v2 architectures, specify the appropriate tag. Check available tags at: Docker Hub or github. Older VPS hosts (e.g., Xeon E5 series) often require the v2 tag.
 
@@ -52,6 +58,7 @@ or
 
 ```bash
 /ip/route/add dst-address=198.18.0.0/15 gateway=192.168.255.1
+```
 
 ### 7. Create a DNS address list to exclude from routing
 
@@ -64,6 +71,7 @@ add address=104.16.248.249 list=DNS
 add address=104.16.249.249 list=DNS
 add address=8.8.8.8 list=DNS
 add address=8.8.4.4 list=DNS
+```
 
 > **Note**: This list prevents routing loops by excluding upstream DNS servers from further routing.
 
@@ -71,6 +79,7 @@ add address=8.8.4.4 list=DNS
 
 ```bash
 /routing/table/add name=fakeip fib
+```
 
 ### 9. Example mangle rules
 
@@ -78,11 +87,13 @@ add address=8.8.4.4 list=DNS
 /ip/firewall/mangle
 add action=mark-connection chain=prerouting connection-mark=no-mark dst-address-list=!DNS dst-address-type=!local new-connection-mark=fakeip src-address=192.168.255.1
 add action=mark-routing chain=prerouting connection-mark=fakeip in-interface=fakeip new-routing-mark=fakeip passthrough=no
+```
 
 ### 10. Add domains for fake IP resolution
 
 ```bash
 /ip/dns/static/add type=FWD forward-to=fakeip match-subdomain=yes name=googlevideo.com
+```
 
 > **Note**: Repeat this command for additional domains that should resolve to fake IPs.
 
@@ -92,5 +103,6 @@ This configuration issues fake IPs for specified domains via `FWD` rules, routes
 
 ```bash
 /ip/route/add dst-address=0.0.0.0/0 gateway=XXX.XXX.XXX.XXX routing-table=fakeip
+```
 
 > **Note**: Replace XXX.XXX.XXX.XXX with your actual gateway to complete the routing setup.
