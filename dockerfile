@@ -16,8 +16,8 @@ WORKDIR /src
 
 # Переключаемся на нужный тэг или коммит
 RUN git switch $TAG --detach
-RUN echo "Updating version.go with TAG=${TAG}-fakettl and BUILDTIME=${BUILDTIME}" && \
-    sed -i "s|Version\s*=.*|Version = \"${TAG}-fakettl\"|" constant/version.go && \
+RUN echo "Updating version.go with TAG=${TAG}-fakeip-ros and BUILDTIME=${BUILDTIME}" && \
+    sed -i "s|Version\s*=.*|Version = \"${TAG}-fakeip-ros\"|" constant/version.go && \
     sed -i "s|BuildTime\s*=.*|BuildTime = \"${BUILDTIME}\"|" constant/version.go
 
 # --- Добавляем helper-файл в пакет dns ---
