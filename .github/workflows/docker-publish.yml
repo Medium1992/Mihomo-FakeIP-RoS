@@ -53,7 +53,7 @@ jobs:
           platforms: linux/amd64
           push: true
           build-args: |
-            TAG=${{ steps.buildtime.outputs.VERSION }}
+            TAG=${{ steps.mihomo_version.outputs.VERSION }}
             BUILDTIME=${{ steps.buildtime.outputs.BUILDTIME }}
             AMD64VERSION=v1
           tags: |
@@ -69,7 +69,7 @@ jobs:
           platforms: linux/amd64
           push: true
           build-args: |
-            TAG=${{ steps.buildtime.outputs.VERSION }}
+            TAG=${{ steps.mihomo_version.outputs.VERSION }}
             BUILDTIME=${{ steps.buildtime.outputs.BUILDTIME }}
             AMD64VERSION=v2
           tags: |
@@ -85,7 +85,7 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           build-args: |
-            TAG=${{ steps.buildtime.outputs.VERSION }}
+            TAG=${{ steps.mihomo_version.outputs.VERSION }}
             BUILDTIME=${{ steps.buildtime.outputs.BUILDTIME }}
             AMD64VERSION=v3
           tags: |
