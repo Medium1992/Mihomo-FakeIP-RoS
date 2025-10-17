@@ -37,7 +37,7 @@ jobs:
       # --- Get build time ---
       - name: Get build time
         id: buildtime
-        run: echo "BUILDTIME=$(date -u '+%a %b %d %H:%M:%S UTC %Y')" >> $GITHUB_OUTPUT
+        run: echo "BUILDTIME=$(date)" >> $GITHUB_OUTPUT
 
       # --- Get version mihomo---
       - name: Read version for mihomo
