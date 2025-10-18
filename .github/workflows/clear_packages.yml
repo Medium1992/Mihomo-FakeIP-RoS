@@ -111,13 +111,14 @@ jobs:
 
           echo "=== 🧩 Untagged images ==="
           untagged_ids=()
-          # Извлекаем закодированные ID
+          # Извлекаем закодированные ID для untagged версий
           for id in $(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'); do
             untagged_ids+=("$id")
           done
           safe_untagged_ids=()
 
           for id in "${untagged_ids[@]}"; do
+            # Получаем данные версии по закодированному ID
             data=$(timeout 10s gh api -H "Accept: application/vnd.github+json" \
               /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id || echo "{}")
             digest=$(echo "$data" | jq -r '.name // "unknown"')
