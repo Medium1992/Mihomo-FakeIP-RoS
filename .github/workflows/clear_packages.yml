@@ -6,12 +6,14 @@ on:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      packages: write
+      delete-packages: write
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.PACKAGE_TOKEN }} # Используй PAT, если GITHUB_TOKEN не работает
       PACKAGE_OWNER: medium1992
       PACKAGE_NAME: mihomo-fakeip-ros
-      DELETE_UNTAGGED: "true" # true — реально удаляет
 
     steps:
       - name: Checkout
@@ -28,7 +30,8 @@ jobs:
       - name: Log in to GHCR with crane
         run: echo "${GITHUB_TOKEN}" | crane auth login ghcr.io -u ${PACKAGE_OWNER} --password-stdin
 
-      - name: Analyze GHCR packages
+      - name: Analyze GHCR packages (dry-run)
+        id: analyze
         run: |
           set -e
 
@@ -129,21 +132,13 @@ jobs:
           done
 
           echo ""
-          if [[ "${DELETE_UNTAGGED}" == "true" && ${#safe_untagged_ids[@]} -gt 0 ]]; then
-            echo "⚠️ Deleting ${#safe_untagged_ids[@]} truly untagged image versions..."
-            for id in "${safe_untagged_ids[@]}"; do
-              echo "Deleting version ID: $id ..."
-              response=$(gh api --silent --method DELETE \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id 2>&1)
-              if [[ $? -eq 0 ]]; then
-                echo "✅ Deleted $id"
-              else
-                echo "❌ Failed to delete $id: $response"
-              fi
-            done
-          else
-            echo "Dry-run mode (no deletions)."
-            echo "Safe untagged image IDs found: ${#safe_untagged_ids[@]}"
-          fi
+          echo "Safe untagged IDs: ${safe_untagged_ids[*]}"
+          echo "safe_untagged_ids=${safe_untagged_ids[*]}" >> $GITHUB_OUTPUT
+
+      - name: Cleanup untagged GHCR versions
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: '${{ env.PACKAGE_OWNER }}/${{ env.PACKAGE_NAME }}'
+          package-type: 'container'
+          package-version-ids: '${{ steps.analyze.outputs.safe_untagged_ids }}'
+          token: ${{ env.GITHUB_TOKEN }}
