@@ -32,6 +32,7 @@ jobs:
           echo ""
 
           declare -A protected_digests
+          declare -A child_digests  # Новое: для child manifests из multi-arch
           declare -A manifest_ids
 
           echo "=== 🏷️ Tagged manifests ==="
@@ -47,13 +48,18 @@ jobs:
             manifest_ids[$id]=1
             protected_digests[$digest]=1
 
-            # Если это manifest list, добавляем все под-дижесты
+            # Если это manifest list, добавляем child digests
             if [[ "$mediaType" == "application/vnd.docker.distribution.manifest.list.v2+json" ]]; then
-              sub_digests=$(gh api -H "Accept: application/vnd.github+json" \
+              echo "  📦 Multi-arch detected: fetching child digests for $digest"
+              sub_digests_json=$(gh api -H "Accept: application/vnd.github+json" \
                 /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
                 | jq -r '.metadata.container.manifest.manifests[].digest // empty')
-              for sd in $sub_digests; do
-                protected_digests[$sd]=1
+              for sd in $(echo "$sub_digests_json"); do
+                if [[ -n "$sd" ]]; then
+                  child_digests[$sd]=1
+                  protected_digests[$sd]=1  # Защищаем и child
+                  echo "    → Protected child: $sd"
+                fi
               done
             fi
 
@@ -61,6 +67,9 @@ jobs:
           done
 
           echo ""
+          echo "Protected child digests count: ${!child_digests[*]} (total unique: ${#child_digests[@]})"
+          echo ""
+
           echo "=== 🧩 Untagged images ==="
           untagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'))
 
@@ -73,10 +82,10 @@ jobs:
             created=$(echo "$data" | jq -r '.created_at')
             mediaType=$(echo "$data" | jq -r '.metadata.container.manifest.mediaType // "unknown"')
 
-            if [[ -n "${protected_digests[$digest]}" ]]; then
-              echo "- ID: $id | Digest: $digest | Created: $created | Type: image → 🛡 пропущен"
+            if [[ -n "${child_digests[$digest]}" || -n "${protected_digests[$digest]}" ]]; then
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: $mediaType → 🛡 пропущен (child/reference)"
             else
-              echo "- ID: $id | Digest: $digest | Created: $created | Type: image → 🧹 кандидат на удаление"
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: $mediaType → 🧹 кандидат на удаление"
               safe_untagged_ids+=("$id")
             fi
           done
