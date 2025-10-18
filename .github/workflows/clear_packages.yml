@@ -110,7 +110,11 @@ jobs:
           echo ""
 
           echo "=== 🧩 Untagged images ==="
-          untagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'))
+          untagged_ids=()
+          # Извлекаем закодированные ID
+          for id in $(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'); do
+            untagged_ids+=("$id")
+          done
           safe_untagged_ids=()
 
           for id in "${untagged_ids[@]}"; do
@@ -120,7 +124,7 @@ jobs:
             created=$(echo "$data" | jq -r '.created_at // "unknown"')
             mediaType=$(echo "$data" | jq -r '.metadata.container.manifest.mediaType // "unknown"')
             if [[ "$digest" == "unknown" ]]; then
-              echo "Error: Failed to fetch data for ID $id"
+              echo "Error: Failed to fetch data for ID $id (possibly already deleted)"
               continue
             fi
             if [[ -n "${child_digests[$digest]}" || -n "${protected_digests[$digest]}" ]]; then
@@ -132,13 +136,33 @@ jobs:
           done
 
           echo ""
-          echo "Safe untagged IDs: ${safe_untagged_ids[*]}"
-          # Преобразуем массив ID в строку с запятыми
-          safe_untagged_ids_comma=$(echo "${safe_untagged_ids[*]}" | tr ' ' ',')
-          echo "safe_untagged_ids_comma=$safe_untagged_ids_comma" >> $GITHUB_OUTPUT
+          echo "Safe untagged IDs (before validation): ${safe_untagged_ids[*]}"
+          # Проверяем существование каждой версии
+          validated_ids=()
+          for id in "${safe_untagged_ids[@]}"; do
+            if gh api -H "Accept: application/vnd.github+json" \
+              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id >/dev/null 2>&1; then
+              validated_ids+=("$id")
+              echo "Version $id exists, added to deletion list"
+            else
+              echo "Version $id not found, skipping"
+            fi
+          done
+
+          echo ""
+          echo "Validated untagged IDs: ${validated_ids[*]}"
+          # Преобразуем в строку с запятыми
+          if [ ${#validated_ids[@]} -eq 0 ]; then
+            echo "No valid untagged IDs to delete"
+            echo "safe_untagged_ids_comma=" >> $GITHUB_OUTPUT
+          else
+            safe_untagged_ids_comma=$(echo "${validated_ids[*]}" | tr ' ' ',')
+            echo "safe_untagged_ids_comma=$safe_untagged_ids_comma" >> $GITHUB_OUTPUT
+          fi
 
       - name: Cleanup untagged GHCR versions
-        uses: actions/delete-package-versions@v4
+        if: steps.analyze.outputs.safe_untagged_ids_comma != ''
+        uses: actions/delete-package-versions@v5
         with:
           package-name: '${{ env.PACKAGE_OWNER }}/${{ env.PACKAGE_NAME }}'
           package-type: 'container'
