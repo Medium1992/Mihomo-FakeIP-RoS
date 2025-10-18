@@ -10,7 +10,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PACKAGE_OWNER: medium1992
       PACKAGE_NAME: mihomo-fakeip-ros
-      DELETE_UNTAGGED: "false" # true — реально удаляет
+      DELETE_UNTAGGED: "true" # true — реально удаляет
 
     steps:
       - name: Checkout
