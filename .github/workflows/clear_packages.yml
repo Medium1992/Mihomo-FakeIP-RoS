@@ -35,34 +35,50 @@ jobs:
           echo "Fetching package versions for ${PACKAGE_OWNER}/${PACKAGE_NAME}..."
           page=1
           packages_json="[]"
+          last_first_id=""
           while true; do
             echo "Fetching page $page..."
-            chunk=$(timeout 30s gh api -H "Accept: application/vnd.github+json" \
-              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100&page=$page || echo "TIMEOUT")
-            if [[ "$chunk" == "TIMEOUT" ]]; then
-              echo "Error: gh api timed out on page $page"
-              exit 1
-            fi
+            # Используем curl для получения данных и заголовков
+            response=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/users/$PACKAGE_OWNER/packages/container/$PACKAGE_NAME/versions?per_page=100&page=$page" \
+              -D headers.txt)
+            chunk="$response"
             # Дебаг: выводим первые 50 символов чанка
             echo "Page $page raw chunk: ${chunk:0:50}..."
+            # Проверяем HTTP-статус
+            http_status=$(head -n 1 headers.txt | cut -d' ' -f2)
+            if [[ "$http_status" != "200" ]]; then
+              echo "Error: HTTP status $http_status on page $page"
+              cat headers.txt
+              exit 1
+            fi
             # Проверяем, пустой ли чанк
-            if [[ "$chunk" == "[]" || -z "$chunk" ]]; then
-              echo "No more versions on page $page"
+            if [[ "$chunk" == "[]" ]]; then
+              echo "No more versions on page $page (empty response)"
               break
             fi
-            # Дебаг: выводим количество версий в чанке
+            # Проверяем количество версий
             chunk_count=$(echo "$chunk" | jq length)
             echo "Page $page: $chunk_count versions"
-            # Если чанк пустой, выходим
-            if [[ "$chunk_count" -eq 0 ]]; then
-              echo "No versions in chunk, stopping"
+            # Проверяем первую версию в чанке, чтобы избежать дублирования
+            first_id=$(echo "$chunk" | jq -r '.[0].id // ""')
+            if [[ -n "$last_first_id" && "$first_id" == "$last_first_id" ]]; then
+              echo "Page $page has same data as previous (ID: $first_id), stopping"
               break
             fi
-            # Объединяем чанк с packages_json
+            last_first_id="$first_id"
+            # Объединяем чанк
             if [[ "$packages_json" == "[]" ]]; then
               packages_json="$chunk"
             else
               packages_json=$(jq -s '.[0] + .[1]' <(echo "$packages_json") <(echo "$chunk"))
+            fi
+            # Проверяем заголовок Link на наличие следующей страницы
+            has_next=$(grep -E 'rel="next"' headers.txt || true)
+            if [[ -z "$has_next" ]]; then
+              echo "No 'next' link in headers on page $page, stopping"
+              break
             fi
             ((page++))
             # Ограничим до 10 страниц для безопасности
@@ -120,8 +136,9 @@ jobs:
           safe_untagged_ids=()
 
           for id in "${untagged_ids[@]}"; do
-            data=$(timeout 10s gh api -H "Accept: application/vnd.github+json" \
-              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id || echo "{}")
+            data=$(timeout 10s curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/users/$PACKAGE_OWNER/packages/container/$PACKAGE_NAME/versions/$id" || echo "{}")
             digest=$(echo "$data" | jq -r '.name // "unknown"')
             created=$(echo "$data" | jq -r '.created_at // "unknown"')
             mediaType=$(echo "$data" | jq -r '.metadata.container.manifest.mediaType // "unknown"')
@@ -144,8 +161,9 @@ jobs:
             echo "⚠️ Deleting ${#safe_untagged_ids[@]} truly untagged image versions..."
             for id in "${safe_untagged_ids[@]}"; do
               echo "Deleting version ID: $id ..."
-              gh api -X DELETE \
-                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
+              curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/users/$PACKAGE_OWNER/packages/container/$PACKAGE_NAME/versions/$id" \
                 && echo "✅ Deleted $id" \
                 || echo "❌ Failed to delete $id"
             done
