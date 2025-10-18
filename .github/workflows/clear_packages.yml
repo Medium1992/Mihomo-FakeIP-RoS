@@ -10,6 +10,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PACKAGE_OWNER: medium1992
       PACKAGE_NAME: mihomo-fakeip-ros
+      DELETE_UNTAGGED: "false"  # ← поменяй на "true", чтобы включить удаление
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -17,29 +19,58 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: List untagged SHAs
+      - name: List and optionally delete GHCR versions
         run: |
-          echo "Fetching package versions..."
+          set -e
+
+          echo "Fetching package versions for ${PACKAGE_OWNER}/${PACKAGE_NAME}..."
           packages_json=$(gh api -H "Accept: application/vnd.github+json" \
             /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions)
 
-          echo "Checking for untagged SHAs..."
-          untagged_shas=()
-          for pkg_id in $(echo "$packages_json" | jq -r '.[].id'); do
-              tags_count=$(echo "$packages_json" | jq -r ".[] | select(.id==$pkg_id) | .metadata.container.tags | length")
-              if [[ "$tags_count" -eq 0 ]]; then
-                  echo "Untagged SHA found: $pkg_id"
-                  untagged_shas+=("$pkg_id")
-              fi
-          done
+          total=$(echo "$packages_json" | jq length)
+          echo "Total versions found: $total"
+          echo ""
 
-          if [ ${#untagged_shas[@]} -eq 0 ]; then
-              echo "No untagged SHAs found."
+          echo "=== 🏷️ Tagged versions ==="
+          tagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length > 0) | .id'))
+          if [ ${#tagged_ids[@]} -eq 0 ]; then
+            echo "No tagged versions found."
           else
-              echo "Total untagged SHAs: ${#untagged_shas[@]}"
-              # Uncomment next lines to actually delete them
-              # for sha in "${untagged_shas[@]}"; do
-              #     echo "Deleting $sha..."
-              #     gh api -X DELETE /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$sha
-              # done
+            for id in "${tagged_ids[@]}"; do
+              data=$(gh api -H "Accept: application/vnd.github+json" \
+                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id)
+              digest=$(echo "$data" | jq -r '.name')
+              tags=$(echo "$data" | jq -r '.metadata.container.tags | join(", ")')
+              echo "- ID: $id | Digest: $digest | Tags: [$tags]"
+            done
+          fi
+
+          echo ""
+          echo "=== 🧩 Untagged versions ==="
+          untagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'))
+          if [ ${#untagged_ids[@]} -eq 0 ]; then
+            echo "✅ No untagged SHAs found."
+          else
+            for id in "${untagged_ids[@]}"; do
+              digest=$(gh api -H "Accept: application/vnd.github+json" \
+                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
+                | jq -r '.name')
+              echo "- ID: $id | Digest: $digest"
+            done
+
+            if [[ "${DELETE_UNTAGGED}" == "true" ]]; then
+              echo ""
+              echo "⚠️ Deletion mode enabled — deleting untagged versions..."
+              for id in "${untagged_ids[@]}"; do
+                echo "Deleting version ID: $id ..."
+                gh api -X DELETE \
+                  /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
+                  && echo "✅ Deleted $id" \
+                  || echo "❌ Failed to delete $id"
+              done
+            else
+              echo ""
+              echo "Dry-run mode (no deletions)."
+              echo "Set DELETE_UNTAGGED=true in workflow to remove them."
+            fi
           fi
