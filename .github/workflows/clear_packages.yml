@@ -157,7 +157,7 @@ jobs:
             echo "No valid untagged IDs to delete"
             echo "safe_untagged_ids_comma=" >> $GITHUB_OUTPUT
           else
-            safe_untagged_ids_comma=$(echo "${validated_ids[*]}" | tr ' ' ',')
+            safe_untagged_ids_comma=$(echo "${validated_ids[*]}" | tr ' ' ', ')
             echo "safe_untagged_ids_comma=$safe_untagged_ids_comma" >> $GITHUB_OUTPUT
           fi
 
@@ -165,7 +165,7 @@ jobs:
         if: steps.analyze.outputs.safe_untagged_ids_comma != ''
         uses: actions/delete-package-versions@v5
         with:
-          package-name: '${{ env.PACKAGE_OWNER }}/${{ env.PACKAGE_NAME }}'
+          package-name: '${{ env.PACKAGE_NAME }}'
           package-type: 'container'
           package-version-ids: '${{ steps.analyze.outputs.safe_untagged_ids_comma }}'
           token: ${{ env.GITHUB_TOKEN }}
