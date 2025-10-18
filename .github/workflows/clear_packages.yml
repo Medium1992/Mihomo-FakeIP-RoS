@@ -16,11 +16,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install jq and docker
+      - name: Install jq and Docker
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq docker.io
+          sudo apt-get install -y jq
+          # Устанавливаем Docker без containerd.io, чтобы избежать конфликта
+          sudo apt-get install -y docker.io docker-buildx-plugin
           sudo systemctl start docker
+          sudo systemctl enable docker
 
       - name: Log in to GHCR
         run: echo "${GITHUB_TOKEN}" | docker login ghcr.io -u ${PACKAGE_OWNER} --password-stdin
