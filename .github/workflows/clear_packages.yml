@@ -34,17 +34,33 @@ jobs:
 
           echo "Fetching package versions for ${PACKAGE_OWNER}/${PACKAGE_NAME}..."
           page=1
-          packages_json=""
+          chunk_files=()
           while true; do
             chunk=$(gh api -H "Accept: application/vnd.github+json" \
               /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100&page=$page)
-            [[ -z "$chunk" || "$chunk" == "[]" ]] && break
-            packages_json+="$chunk"
+            if [[ -z "$chunk" || "$chunk" == "[]" ]]; then
+              break
+            fi
+            chunk_file=$(mktemp)
+            echo "$chunk" > "$chunk_file"
+            chunk_files+=("$chunk_file")
             ((page++))
           done
-          packages_json=$(echo "$packages_json" | jq -s 'flatten')
+          
+          if [[ ${#chunk_files[@]} -eq 0 ]]; then
+            echo "No versions found!"
+            exit 0
+          fi
+          
+          # Объединяем все чанки в один JSON-массив
+          packages_json=$(jq -s 'flatten' "${chunk_files[@]}")
+          # Удаляем временные файлы
+          for file in "${chunk_files[@]}"; do
+            rm "$file"
+          done
+          
           total=$(echo "$packages_json" | jq length)
-          echo "Total versions found: $total"
+          echo "Total versions found: $total (pages processed: $((page-1)))"
           echo ""
 
           declare -A protected_digests
