@@ -16,8 +16,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Install jq and docker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq docker.io
+          sudo systemctl start docker
+
+      - name: Log in to GHCR
+        run: echo "${GITHUB_TOKEN}" | docker login ghcr.io -u ${PACKAGE_OWNER} --password-stdin
 
       - name: Analyze GHCR packages
         run: |
@@ -32,7 +38,7 @@ jobs:
           echo ""
 
           declare -A protected_digests
-          declare -A child_digests  # Новое: для child manifests из multi-arch
+          declare -A child_digests
           declare -A manifest_ids
 
           echo "=== 🏷️ Tagged manifests ==="
@@ -48,26 +54,25 @@ jobs:
             manifest_ids[$id]=1
             protected_digests[$digest]=1
 
-            # Если это manifest list, добавляем child digests
-            if [[ "$mediaType" == "application/vnd.docker.distribution.manifest.list.v2+json" ]]; then
-              echo "  📦 Multi-arch detected: fetching child digests for $digest"
-              sub_digests_json=$(gh api -H "Accept: application/vnd.github+json" \
-                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
-                | jq -r '.metadata.container.manifest.manifests[].digest // empty')
-              for sd in $(echo "$sub_digests_json"); do
+            # Извлекаем child digests с помощью docker manifest inspect
+            echo "  📦 Inspecting manifest for tags: [$tags]"
+            for tag in $(_jq '.metadata.container.tags[]'); do
+              manifest_json=$(docker manifest inspect ghcr.io/${PACKAGE_OWNER}/${PACKAGE_NAME}:${tag} 2>/dev/null || echo "{}")
+              sub_digests=$(echo "$manifest_json" | jq -r '.manifests[].digest // empty')
+              for sd in $sub_digests; do
                 if [[ -n "$sd" ]]; then
                   child_digests[$sd]=1
-                  protected_digests[$sd]=1  # Защищаем и child
-                  echo "    → Protected child: $sd"
+                  protected_digests[$sd]=1
+                  echo "    → Protected child digest: $sd"
                 fi
               done
-            fi
+            done
 
             echo "- ID: $id | Digest: $digest | Tags: [$tags] | Created: $created | Type: manifest ($mediaType)"
           done
 
           echo ""
-          echo "Protected child digests count: ${!child_digests[*]} (total unique: ${#child_digests[@]})"
+          echo "Protected child digests count: ${#child_digests[@]}"
           echo ""
 
           echo "=== 🧩 Untagged images ==="
@@ -83,7 +88,7 @@ jobs:
             mediaType=$(echo "$data" | jq -r '.metadata.container.manifest.mediaType // "unknown"')
 
             if [[ -n "${child_digests[$digest]}" || -n "${protected_digests[$digest]}" ]]; then
-              echo "- ID: $id | Digest: $digest | Created: $created | Type: $mediaType → 🛡 пропущен (child/reference)"
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: $mediaType → 🛡 пропущен (child or referenced)"
             else
               echo "- ID: $id | Digest: $digest | Created: $created | Type: $mediaType → 🧹 кандидат на удаление"
               safe_untagged_ids+=("$id")
