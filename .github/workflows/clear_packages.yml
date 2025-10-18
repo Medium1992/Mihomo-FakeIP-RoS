@@ -9,7 +9,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      delete-packages: write
     env:
       GITHUB_TOKEN: ${{ secrets.PACKAGE_TOKEN }} # Используй PAT, если GITHUB_TOKEN не работает
       PACKAGE_OWNER: medium1992
