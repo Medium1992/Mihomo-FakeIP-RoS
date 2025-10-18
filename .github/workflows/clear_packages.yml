@@ -22,7 +22,6 @@ jobs:
       - name: Analyze GHCR packages
         run: |
           set -e
-
           echo "Fetching package versions for ${PACKAGE_OWNER}/${PACKAGE_NAME}..."
           packages_json=$(gh api -H "Accept: application/vnd.github+json" \
             /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100)
@@ -32,7 +31,7 @@ jobs:
           echo ""
 
           declare -A manifest_digests
-          declare -A manifest_ids
+          declare -A child_digests
 
           echo "=== 🏷️ Tagged manifests ==="
           for row in $(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length > 0) | @base64'); do
@@ -44,16 +43,28 @@ jobs:
             created=$(_jq '.created_at')
             mediaType=$(_jq '.metadata.container.manifest.mediaType // "unknown"')
 
-            manifest_ids[$id]=1
             manifest_digests[$digest]=1
 
             echo "- ID: $id | Digest: $digest | Tags: [$tags] | Created: $created | Type: manifest ($mediaType)"
+
+            # Если это multi-arch manifest list — получить дочерние digests
+            if [[ "$mediaType" == "application/vnd.docker.distribution.manifest.list.v2+json" ]]; then
+              manifest_json=$(gh api -H "Accept: application/vnd.oci.image.index.v1+json" \
+                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id)
+              children=$(echo "$manifest_json" | jq -r '.metadata.container.manifest.child | .[]? // empty')
+              if [[ -n "$children" ]]; then
+                echo "  ⤷ includes:"
+                for child in $children; do
+                  echo "    - $child"
+                  child_digests[$child]=1
+                done
+              fi
+            fi
           done
 
           echo ""
           echo "=== 🧩 Untagged images ==="
           untagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'))
-
           safe_untagged_ids=()
 
           for id in "${untagged_ids[@]}"; do
@@ -69,11 +80,17 @@ jobs:
             fi
 
             if [[ -n "${manifest_digests[$digest]}" ]]; then
-              echo "- ID: $id | Digest: $digest | Created: $created | Type: image (part of manifest) → 🛡 пропущен"
-            else
-              echo "- ID: $id | Digest: $digest | Created: $created | Type: image → 🧹 кандидат на удаление"
-              safe_untagged_ids+=("$id")
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: image (тегированный) → 🛡 пропущен"
+              continue
             fi
+
+            if [[ -n "${child_digests[$digest]}" ]]; then
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: image (в составе manifest) → 🛡 пропущен"
+              continue
+            fi
+
+            echo "- ID: $id | Digest: $digest | Created: $created | Type: image → 🧹 кандидат на удаление"
+            safe_untagged_ids+=("$id")
           done
 
           echo ""
