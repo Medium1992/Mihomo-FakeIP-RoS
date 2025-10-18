@@ -133,12 +133,14 @@ jobs:
 
           echo ""
           echo "Safe untagged IDs: ${safe_untagged_ids[*]}"
-          echo "safe_untagged_ids=${safe_untagged_ids[*]}" >> $GITHUB_OUTPUT
+          # Преобразуем массив ID в строку с запятыми
+          safe_untagged_ids_comma=$(echo "${safe_untagged_ids[*]}" | tr ' ' ',')
+          echo "safe_untagged_ids_comma=$safe_untagged_ids_comma" >> $GITHUB_OUTPUT
 
       - name: Cleanup untagged GHCR versions
         uses: actions/delete-package-versions@v4
         with:
           package-name: '${{ env.PACKAGE_OWNER }}/${{ env.PACKAGE_NAME }}'
           package-type: 'container'
-          package-version-ids: '${{ steps.analyze.outputs.safe_untagged_ids }}'
+          package-version-ids: '${{ steps.analyze.outputs.safe_untagged_ids_comma }}'
           token: ${{ env.GITHUB_TOKEN }}
