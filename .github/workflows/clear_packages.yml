@@ -6,11 +6,17 @@ on:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages:
+        read: true
+        write: true
+        delete: true  # Ключевой для удаления версий пакетов в GHCR
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PACKAGE_OWNER: medium1992
       PACKAGE_NAME: mihomo-fakeip-ros
-      DELETE_UNTAGGED: "true" # true — реально удаляет
+      DELETE_UNTAGGED: "false" # true — реально удаляет
 
     steps:
       - name: Checkout
@@ -20,7 +26,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
-          # Устанавливаем crane
           curl -sL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xz crane
           chmod +x /usr/local/bin/crane
           crane version || { echo "Crane failed to install"; exit 1; }
@@ -38,50 +43,31 @@ jobs:
           last_first_id=""
           while true; do
             echo "Fetching page $page..."
-            # Используем curl для получения данных и заголовков
-            response=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/users/$PACKAGE_OWNER/packages/container/$PACKAGE_NAME/versions?per_page=100&page=$page" \
-              -D headers.txt)
-            chunk="$response"
-            # Дебаг: выводим первые 50 символов чанка
-            echo "Page $page raw chunk: ${chunk:0:50}..."
-            # Проверяем HTTP-статус
-            http_status=$(head -n 1 headers.txt | cut -d' ' -f2)
-            if [[ "$http_status" != "200" ]]; then
-              echo "Error: HTTP status $http_status on page $page"
-              cat headers.txt
+            chunk=$(timeout 30s gh api -H "Accept: application/vnd.github+json" \
+              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100&page=$page || echo "TIMEOUT")
+            if [[ "$chunk" == "TIMEOUT" ]]; then
+              echo "Error: gh api timed out on page $page"
               exit 1
             fi
-            # Проверяем, пустой ли чанк
-            if [[ "$chunk" == "[]" ]]; then
+            echo "Page $page raw chunk: ${chunk:0:50}..."
+            chunk_count=$(echo "$chunk" | jq length)
+            echo "Page $page: $chunk_count versions"
+            if [[ "$chunk" == "[]" || "$chunk_count" -eq 0 ]]; then
               echo "No more versions on page $page (empty response)"
               break
             fi
-            # Проверяем количество версий
-            chunk_count=$(echo "$chunk" | jq length)
-            echo "Page $page: $chunk_count versions"
-            # Проверяем первую версию в чанке, чтобы избежать дублирования
             first_id=$(echo "$chunk" | jq -r '.[0].id // ""')
             if [[ -n "$last_first_id" && "$first_id" == "$last_first_id" ]]; then
               echo "Page $page has same data as previous (ID: $first_id), stopping"
               break
             fi
             last_first_id="$first_id"
-            # Объединяем чанк
             if [[ "$packages_json" == "[]" ]]; then
               packages_json="$chunk"
             else
               packages_json=$(jq -s '.[0] + .[1]' <(echo "$packages_json") <(echo "$chunk"))
             fi
-            # Проверяем заголовок Link на наличие следующей страницы
-            has_next=$(grep -E 'rel="next"' headers.txt || true)
-            if [[ -z "$has_next" ]]; then
-              echo "No 'next' link in headers on page $page, stopping"
-              break
-            fi
             ((page++))
-            # Ограничим до 10 страниц для безопасности
             if [[ $page -gt 10 ]]; then
               echo "Reached max page limit (10)"
               break
@@ -99,17 +85,13 @@ jobs:
           echo "=== 🏷️ Tagged manifests ==="
           for row in $(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length > 0) | @base64'); do
             _jq() { echo "$row" | base64 --decode | jq -r "$1"; }
-
             id=$(_jq '.id')
             digest=$(_jq '.name')
             tags=$(_jq '.metadata.container.tags | join(", ")')
             created=$(_jq '.created_at')
             mediaType=$(_jq '.metadata.container.manifest.mediaType // "unknown"')
-
             manifest_ids[$id]=1
             protected_digests[$digest]=1
-
-            # Извлекаем child digests с помощью crane
             echo "  📦 Inspecting manifest for tags: [$tags]"
             for tag in $(_jq '.metadata.container.tags[]' | sort -u); do
               manifest_json=$(timeout 10s crane manifest ghcr.io/${PACKAGE_OWNER}/${PACKAGE_NAME}:${tag} 2>/dev/null || echo "{}")
@@ -122,7 +104,6 @@ jobs:
                 fi
               done
             done
-
             echo "- ID: $id | Digest: $digest | Tags: [$tags] | Created: $created | Type: manifest ($mediaType)"
           done
 
@@ -132,22 +113,18 @@ jobs:
 
           echo "=== 🧩 Untagged images ==="
           untagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'))
-
           safe_untagged_ids=()
 
           for id in "${untagged_ids[@]}"; do
-            data=$(timeout 10s curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/users/$PACKAGE_OWNER/packages/container/$PACKAGE_NAME/versions/$id" || echo "{}")
+            data=$(timeout 10s gh api -H "Accept: application/vnd.github+json" \
+              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id || echo "{}")
             digest=$(echo "$data" | jq -r '.name // "unknown"')
             created=$(echo "$data" | jq -r '.created_at // "unknown"')
             mediaType=$(echo "$data" | jq -r '.metadata.container.manifest.mediaType // "unknown"')
-
             if [[ "$digest" == "unknown" ]]; then
               echo "Error: Failed to fetch data for ID $id"
               continue
             fi
-
             if [[ -n "${child_digests[$digest]}" || -n "${protected_digests[$digest]}" ]]; then
               echo "- ID: $id | Digest: $digest | Created: $created | Type: $mediaType → 🛡 пропущен (child or referenced)"
             else
@@ -161,14 +138,14 @@ jobs:
             echo "⚠️ Deleting ${#safe_untagged_ids[@]} truly untagged image versions..."
             for id in "${safe_untagged_ids[@]}"; do
               echo "Deleting version ID: $id ..."
-              response=$(gh api -X DELETE \
-                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
-                -H "Accept: application/vnd.github+json" 2>/dev/null)
-              status=$(echo "$response" | jq -r '.status // ""')
-              if [[ "$status" == "204" ]] || [[ -z "$status" && $? -eq 0 ]]; then
+              response=$(gh api --silent --method DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id 2>&1)
+              if [[ $? -eq 0 ]]; then
                 echo "✅ Deleted $id"
               else
-                echo "❌ Failed to delete $id (status: $status or error: $response)"
+                echo "❌ Failed to delete $id: $response"
               fi
             done
           else
