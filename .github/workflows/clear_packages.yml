@@ -1,4 +1,4 @@
-name: Cleanup untagged GHCR packages
+name: Cleanup untagged GHCR packages (safe multi-arch aware)
 
 on:
   workflow_dispatch:
@@ -10,67 +10,72 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PACKAGE_OWNER: medium1992
       PACKAGE_NAME: mihomo-fakeip-ros
-      DELETE_UNTAGGED: "false"  # ← поменяй на "true", чтобы включить удаление
+      DELETE_UNTAGGED: "false" # Установи true, если хочешь реально удалять
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: List and optionally delete GHCR versions
+      - name: Analyze GHCR packages
         run: |
           set -e
 
           echo "Fetching package versions for ${PACKAGE_OWNER}/${PACKAGE_NAME}..."
           packages_json=$(gh api -H "Accept: application/vnd.github+json" \
-            /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions)
+            /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100)
 
           total=$(echo "$packages_json" | jq length)
           echo "Total versions found: $total"
           echo ""
 
-          echo "=== 🏷️ Tagged versions ==="
+          echo "=== 🏷️ Tagged manifests ==="
           tagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length > 0) | .id'))
-          if [ ${#tagged_ids[@]} -eq 0 ]; then
-            echo "No tagged versions found."
-          else
-            for id in "${tagged_ids[@]}"; do
-              data=$(gh api -H "Accept: application/vnd.github+json" \
-                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id)
-              digest=$(echo "$data" | jq -r '.name')
-              tags=$(echo "$data" | jq -r '.metadata.container.tags | join(", ")')
-              echo "- ID: $id | Digest: $digest | Tags: [$tags]"
-            done
-          fi
+          tagged_digests=()
+
+          for id in "${tagged_ids[@]}"; do
+            data=$(gh api -H "Accept: application/vnd.github+json" \
+              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id)
+            digest=$(echo "$data" | jq -r '.name')
+            tags=$(echo "$data" | jq -r '.metadata.container.tags | join(", ")')
+            created=$(echo "$data" | jq -r '.created_at')
+            echo "- ID: $id | Digest: $digest | Tags: [$tags] | Created: $created | Type: manifest"
+            tagged_digests+=("$digest")
+          done
 
           echo ""
-          echo "=== 🧩 Untagged versions ==="
+          echo "=== 🧩 Untagged images ==="
           untagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'))
-          if [ ${#untagged_ids[@]} -eq 0 ]; then
-            echo "✅ No untagged SHAs found."
-          else
-            for id in "${untagged_ids[@]}"; do
-              digest=$(gh api -H "Accept: application/vnd.github+json" \
-                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
-                | jq -r '.name')
-              echo "- ID: $id | Digest: $digest"
-            done
 
-            if [[ "${DELETE_UNTAGGED}" == "true" ]]; then
-              echo ""
-              echo "⚠️ Deletion mode enabled — deleting untagged versions..."
-              for id in "${untagged_ids[@]}"; do
-                echo "Deleting version ID: $id ..."
-                gh api -X DELETE \
-                  /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
-                  && echo "✅ Deleted $id" \
-                  || echo "❌ Failed to delete $id"
-              done
+          safe_untagged_ids=()
+          for id in "${untagged_ids[@]}"; do
+            data=$(gh api -H "Accept: application/vnd.github+json" \
+              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id)
+            digest=$(echo "$data" | jq -r '.name')
+            created=$(echo "$data" | jq -r '.created_at')
+
+            # Проверяем, относится ли digest к одному из manifest’ов
+            if printf '%s\n' "${tagged_digests[@]}" | grep -q "$digest"; then
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: manifest (child) → 🛡 пропущен"
             else
-              echo ""
-              echo "Dry-run mode (no deletions)."
-              echo "Set DELETE_UNTAGGED=true in workflow to remove them."
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: image → 🧹 кандидат на удаление"
+              safe_untagged_ids+=("$id")
             fi
+          done
+
+          echo ""
+          if [[ "${DELETE_UNTAGGED}" == "true" && ${#safe_untagged_ids[@]} -gt 0 ]]; then
+            echo "⚠️ Deleting ${#safe_untagged_ids[@]} truly untagged image versions..."
+            for id in "${safe_untagged_ids[@]}"; do
+              echo "Deleting version ID: $id ..."
+              gh api -X DELETE \
+                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
+                && echo "✅ Deleted $id" \
+                || echo "❌ Failed to delete $id"
+            done
+          else
+            echo "Dry-run mode (no deletions)."
+            echo "Safe untagged image IDs found: ${#safe_untagged_ids[@]}"
           fi
