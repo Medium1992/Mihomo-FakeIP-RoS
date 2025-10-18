@@ -161,11 +161,15 @@ jobs:
             echo "⚠️ Deleting ${#safe_untagged_ids[@]} truly untagged image versions..."
             for id in "${safe_untagged_ids[@]}"; do
               echo "Deleting version ID: $id ..."
-              curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/users/$PACKAGE_OWNER/packages/container/$PACKAGE_NAME/versions/$id" \
-                && echo "✅ Deleted $id" \
-                || echo "❌ Failed to delete $id"
+              response=$(gh api -X DELETE \
+                /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id \
+                -H "Accept: application/vnd.github+json" 2>/dev/null)
+              status=$(echo "$response" | jq -r '.status // ""')
+              if [[ "$status" == "204" ]] || [[ -z "$status" && $? -eq 0 ]]; then
+                echo "✅ Deleted $id"
+              else
+                echo "❌ Failed to delete $id (status: $status or error: $response)"
+              fi
             done
           else
             echo "Dry-run mode (no deletions)."
