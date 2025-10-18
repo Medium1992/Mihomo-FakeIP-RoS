@@ -16,17 +16,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install jq and Docker
+      - name: Install jq and crane
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
-          # Устанавливаем Docker без containerd.io, чтобы избежать конфликта
-          sudo apt-get install -y docker.io docker-buildx-plugin
-          sudo systemctl start docker
-          sudo systemctl enable docker
+          # Устанавливаем crane
+          curl -sL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xz crane
+          chmod +x /usr/local/bin/crane
+          crane version || { echo "Crane failed to install"; exit 1; }
 
-      - name: Log in to GHCR
-        run: echo "${GITHUB_TOKEN}" | docker login ghcr.io -u ${PACKAGE_OWNER} --password-stdin
+      - name: Log in to GHCR with crane
+        run: echo "${GITHUB_TOKEN}" | crane auth login ghcr.io -u ${PACKAGE_OWNER} --password-stdin
 
       - name: Analyze GHCR packages
         run: |
@@ -57,10 +57,10 @@ jobs:
             manifest_ids[$id]=1
             protected_digests[$digest]=1
 
-            # Извлекаем child digests с помощью docker manifest inspect
+            # Извлекаем child digests с помощью crane
             echo "  📦 Inspecting manifest for tags: [$tags]"
             for tag in $(_jq '.metadata.container.tags[]'); do
-              manifest_json=$(docker manifest inspect ghcr.io/${PACKAGE_OWNER}/${PACKAGE_NAME}:${tag} 2>/dev/null || echo "{}")
+              manifest_json=$(crane manifest ghcr.io/${PACKAGE_OWNER}/${PACKAGE_NAME}:${tag} 2>/dev/null || echo "{}")
               sub_digests=$(echo "$manifest_json" | jq -r '.manifests[].digest // empty')
               for sd in $sub_digests; do
                 if [[ -n "$sd" ]]; then
