@@ -2,7 +2,7 @@
 FROM --platform=$BUILDPLATFORM golang:alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
-ARG TAG   # тэг или коммит
+ARG TAG 
 ARG WITH_GVISOR=0  # 1 - включить тег with_gvisor
 ARG BUILDTIME
 ARG AMD64VERSION
@@ -14,7 +14,7 @@ RUN apk add --no-cache git make
 RUN git clone https://github.com/MetaCubeX/mihomo.git /src
 WORKDIR /src
 
-# Переключаемся на нужный тэг или коммит
+# Переключаемся на нужный тэг
 RUN git switch $TAG --detach
 RUN echo "Updating version.go with TAG=${TAG}-fakeip-ros and BUILDTIME=${BUILDTIME}" && \
     sed -i "s|Version\s*=.*|Version = \"${TAG}-fakeip-ros\"|" constant/version.go && \
@@ -63,18 +63,14 @@ RUN BUILD_TAGS="" && \
         go build -tags "$BUILD_TAGS" -trimpath -ldflags "-w -s -buildid=" -o /out/mihomo .; \
     fi
 
-
-# Финальный минимальный образ
+# Финальный образ
 FROM alpine:latest
 RUN apk add --no-cache ca-certificates tzdata nftables iptables iptables-legacy && \
     rm -vrf /var/cache/apk/* && \
-    # # IPv4
     rm /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore && \
     ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables && \
     ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save && \
     ln -s /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore
-
-# ENV DISABLE_NFTABLES=1
 
 COPY --from=builder /out/mihomo /mihomo
 COPY entrypoint.sh /entrypoint.sh

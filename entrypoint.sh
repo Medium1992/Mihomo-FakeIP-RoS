@@ -113,11 +113,11 @@ ip route replace local 0.0.0.0/0 dev lo table 100 table 100
 run() {
 mkdir -p /root/.config/mihomo
 if lsmod | grep -q '^nft_tproxy'; then
-   echo "nft_tproxy module already loaded"
+   echo "nft_tproxy module loaded, use inbound TPROXY"
    nft_rules
    config_file_mihomo_tproxy
 else
-   echo "nft_tproxy not loaded"
+   echo "nft_tproxy not loaded, use inbound TUN with TCP redirect"
    config_file_mihomo_tun
 fi
 exec ./mihomo

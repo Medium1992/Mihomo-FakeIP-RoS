@@ -2,10 +2,8 @@ name: Build and Publish Multi-Arch Docker Images
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Ежедневно в 00:00 UTC
+    - cron: '05 0 * * *' # Ежедневно в 00:05 UTC
   workflow_dispatch: # Ручной запуск
-  push:
-    branches: [main]
 
 jobs:
   check-and-build:
