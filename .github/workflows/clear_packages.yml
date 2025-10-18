@@ -1,4 +1,4 @@
-name: Cleanup untagged GHCR packages (safe multi-arch aware)
+name: Cleanup untagged GHCR packages (multi-arch safe)
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PACKAGE_OWNER: medium1992
       PACKAGE_NAME: mihomo-fakeip-ros
-      DELETE_UNTAGGED: "false" # Установи true, если хочешь реально удалять
+      DELETE_UNTAGGED: "false" # true — реально удаляет
 
     steps:
       - name: Checkout
@@ -31,18 +31,23 @@ jobs:
           echo "Total versions found: $total"
           echo ""
 
-          echo "=== 🏷️ Tagged manifests ==="
-          tagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length > 0) | .id'))
-          tagged_digests=()
+          declare -A manifest_digests
+          declare -A manifest_ids
 
-          for id in "${tagged_ids[@]}"; do
-            data=$(gh api -H "Accept: application/vnd.github+json" \
-              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id)
-            digest=$(echo "$data" | jq -r '.name')
-            tags=$(echo "$data" | jq -r '.metadata.container.tags | join(", ")')
-            created=$(echo "$data" | jq -r '.created_at')
-            echo "- ID: $id | Digest: $digest | Tags: [$tags] | Created: $created | Type: manifest"
-            tagged_digests+=("$digest")
+          echo "=== 🏷️ Tagged manifests ==="
+          for row in $(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length > 0) | @base64'); do
+            _jq() { echo "$row" | base64 --decode | jq -r "$1"; }
+
+            id=$(_jq '.id')
+            digest=$(_jq '.name')
+            tags=$(_jq '.metadata.container.tags | join(", ")')
+            created=$(_jq '.created_at')
+            mediaType=$(_jq '.metadata.container.manifest.mediaType // "unknown"')
+
+            manifest_ids[$id]=1
+            manifest_digests[$digest]=1
+
+            echo "- ID: $id | Digest: $digest | Tags: [$tags] | Created: $created | Type: manifest ($mediaType)"
           done
 
           echo ""
@@ -50,15 +55,21 @@ jobs:
           untagged_ids=($(echo "$packages_json" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id'))
 
           safe_untagged_ids=()
+
           for id in "${untagged_ids[@]}"; do
             data=$(gh api -H "Accept: application/vnd.github+json" \
               /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions/$id)
             digest=$(echo "$data" | jq -r '.name')
             created=$(echo "$data" | jq -r '.created_at')
+            mediaType=$(echo "$data" | jq -r '.metadata.container.manifest.mediaType // "unknown"')
 
-            # Проверяем, относится ли digest к одному из manifest’ов
-            if printf '%s\n' "${tagged_digests[@]}" | grep -q "$digest"; then
-              echo "- ID: $id | Digest: $digest | Created: $created | Type: manifest (child) → 🛡 пропущен"
+            if [[ "$mediaType" == "application/vnd.docker.distribution.manifest.list.v2+json" ]]; then
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: manifest (list) → 🛡 пропущен"
+              continue
+            fi
+
+            if [[ -n "${manifest_digests[$digest]}" ]]; then
+              echo "- ID: $id | Digest: $digest | Created: $created | Type: image (part of manifest) → 🛡 пропущен"
             else
               echo "- ID: $id | Digest: $digest | Created: $created | Type: image → 🧹 кандидат на удаление"
               safe_untagged_ids+=("$id")
