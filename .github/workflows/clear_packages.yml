@@ -6,12 +6,7 @@ on:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages:
-        read: true
-        write: true
-        delete: true  # Ключевой для удаления версий пакетов в GHCR
+
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PACKAGE_OWNER: medium1992
