@@ -33,9 +33,16 @@ jobs:
           set -e
 
           echo "Fetching package versions for ${PACKAGE_OWNER}/${PACKAGE_NAME}..."
-          packages_json=$(gh api -H "Accept: application/vnd.github+json" \
-            /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100)
-
+          page=1
+          packages_json=""
+          while true; do
+            chunk=$(gh api -H "Accept: application/vnd.github+json" \
+              /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100&page=$page)
+            [[ -z "$chunk" || "$chunk" == "[]" ]] && break
+            packages_json+="$chunk"
+            ((page++))
+          done
+          packages_json=$(echo "$packages_json" | jq -s 'flatten')
           total=$(echo "$packages_json" | jq length)
           echo "Total versions found: $total"
           echo ""
@@ -59,7 +66,7 @@ jobs:
 
             # Извлекаем child digests с помощью crane
             echo "  📦 Inspecting manifest for tags: [$tags]"
-            for tag in $(_jq '.metadata.container.tags[]'); do
+            for tag in $(_jq '.metadata.container.tags[]' | sort -u); do
               manifest_json=$(crane manifest ghcr.io/${PACKAGE_OWNER}/${PACKAGE_NAME}:${tag} 2>/dev/null || echo "{}")
               sub_digests=$(echo "$manifest_json" | jq -r '.manifests[].digest // empty')
               for sd in $sub_digests; do
