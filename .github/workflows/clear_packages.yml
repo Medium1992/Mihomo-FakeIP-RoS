@@ -37,21 +37,33 @@ jobs:
           packages_json="[]"
           while true; do
             echo "Fetching page $page..."
-            # Добавляем таймаут 30 секунд и дебаг
             chunk=$(timeout 30s gh api -H "Accept: application/vnd.github+json" \
               /users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100&page=$page || echo "TIMEOUT")
             if [[ "$chunk" == "TIMEOUT" ]]; then
               echo "Error: gh api timed out on page $page"
               exit 1
             fi
-            if [[ -z "$chunk" || "$chunk" == "[]" ]]; then
+            # Дебаг: выводим первые 50 символов чанка
+            echo "Page $page raw chunk: ${chunk:0:50}..."
+            # Проверяем, пустой ли чанк
+            if [[ "$chunk" == "[]" || -z "$chunk" ]]; then
               echo "No more versions on page $page"
               break
             fi
-            # Дебаг: выводим размер чанка
-            echo "Page $page: $(echo "$chunk" | jq length) versions"
+            # Дебаг: выводим количество версий в чанке
+            chunk_count=$(echo "$chunk" | jq length)
+            echo "Page $page: $chunk_count versions"
+            # Если чанк пустой, выходим
+            if [[ "$chunk_count" -eq 0 ]]; then
+              echo "No versions in chunk, stopping"
+              break
+            fi
             # Объединяем чанк с packages_json
-            packages_json=$(jq -s '.[0] + .[1]' <(echo "$packages_json") <(echo "$chunk"))
+            if [[ "$packages_json" == "[]" ]]; then
+              packages_json="$chunk"
+            else
+              packages_json=$(jq -s '.[0] + .[1]' <(echo "$packages_json") <(echo "$chunk"))
+            fi
             ((page++))
             # Ограничим до 10 страниц для безопасности
             if [[ $page -gt 10 ]]; then
