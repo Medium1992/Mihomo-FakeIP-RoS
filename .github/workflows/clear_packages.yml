@@ -10,7 +10,8 @@ jobs:
       contents: read
       packages: write
     env:
-      GITHUB_TOKEN: ${{ secrets.PACKAGE_TOKEN }} # Используй PAT, если GITHUB_TOKEN не работает
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Для gh api
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Замени на ${{ secrets.PACKAGE_TOKEN }} для PAT
       PACKAGE_OWNER: medium1992
       PACKAGE_NAME: mihomo-fakeip-ros
 
