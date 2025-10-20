@@ -65,12 +65,26 @@ RUN BUILD_TAGS="" && \
 
 # Финальный образ
 FROM alpine:latest
-RUN apk add --no-cache ca-certificates tzdata nftables iptables iptables-legacy && \
-    rm -vrf /var/cache/apk/* && \
-    rm /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore && \
-    ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables && \
-    ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save && \
-    ln -s /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "arm64" ] || [ "$TARGETARCH" = "amd64" ]; then \
+        apk update && \
+        apk add --no-cache ca-certificates tzdata iptables iptables-legacy nftables; \
+        rm -vrf /var/cache/apk/* && \
+        rm -f /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore && \
+        ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables && \
+        ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save && \
+        ln -s /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore; \
+    elif [ "$TARGETARCH" = "arm" ]; then \
+        apk update && \
+        apk add --no-cache ca-certificates tzdata iptables iptables-legacy && \
+        rm -vrf /var/cache/apk/* && \
+        rm -f /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore && \
+        ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables && \
+        ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save && \
+        ln -s /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore; \
+    else \
+        echo "Unsupported architecture: $TARGETARCH" && exit 1; \
+    fi
 
 COPY --from=builder /out/mihomo /mihomo
 COPY entrypoint.sh /entrypoint.sh
