@@ -1,4 +1,4 @@
-name: Build and Publish Multi-Arch Docker Images
+name: Manual Build and Publish Multi-Arch Docker Images
 
 on:
   workflow_dispatch: # Ручной запуск

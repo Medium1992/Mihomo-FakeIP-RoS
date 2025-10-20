@@ -1,4 +1,4 @@
-name: Build and Publish Multi-Arch Docker Images
+name: Auto Build and Publish Multi-Arch Docker Images
 
 on:
   schedule:
