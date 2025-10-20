@@ -40,6 +40,9 @@ jobs:
           fi
           echo "Latest stable mihomo tag: $MIHOMO_TAG"
           echo "VERSION=$MIHOMO_TAG" >> $GITHUB_ENV
+          
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       # 3. Устанавливаем Docker Buildx
       - name: Set up Docker Buildx
