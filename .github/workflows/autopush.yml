@@ -71,6 +71,7 @@ jobs:
           fi
 
       - name: Checkout code
+        if: ${{ env.BUILD == 'true' }}
         uses: actions/checkout@v4
 
       # 5. Устанавливаем Docker Buildx
@@ -156,9 +157,11 @@ jobs:
             medium1992/mihomo-fakeip-ros:${{ env.VERSION }}
 
       - name: Log in to GHCR with crane
+        if: ${{ env.BUILD == 'true' }}      
         run: echo "${GITHUB_TOKEN}" | crane auth login ghcr.io -u ${PACKAGE_OWNER} --password-stdin
 
       - name: Analyze GHCR packages (dry-run)
+        if: ${{ env.BUILD == 'true' }}      
         id: analyze
         run: |
           set -e
