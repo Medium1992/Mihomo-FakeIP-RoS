@@ -84,7 +84,7 @@ listeners:
     mtu: 1500
 
 rules:
-  - AND,((NETWORK,udp),(DST-PORT,443)),${QUIC:-REJECT-DROP}
+  - AND,((NETWORK,udp),(DST-PORT,443),(DOMAIN-SUFFIX,googlevideo.com)),REJECT
   - MATCH,DIRECT
 EOF
 }
