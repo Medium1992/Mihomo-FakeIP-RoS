@@ -9,6 +9,7 @@ ARG AMD64VERSION
 
 # Устанавливаем зависимости
 RUN apk add --no-cache git make
+RUN mkdir -p /final
 
 # Клонируем репозиторий
 RUN git clone https://github.com/MetaCubeX/mihomo.git /src
@@ -57,36 +58,29 @@ RUN BUILD_TAGS="" && \
     if [ "$TARGETARCH" = "amd64" ]; then \
         echo "Setting GOAMD64=$AMD64VERSION for amd64"; \
         CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GOAMD64=$AMD64VERSION \
-        go build -tags "$BUILD_TAGS" -trimpath -ldflags "-w -s -buildid=" -o /out/mihomo .; \
+        go build -tags "$BUILD_TAGS" -trimpath -ldflags "-w -s -buildid=" -o /final/mihomo .; \
     else \
         CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-        go build -tags "$BUILD_TAGS" -trimpath -ldflags "-w -s -buildid=" -o /out/mihomo .; \
+        go build -tags "$BUILD_TAGS" -trimpath -ldflags "-w -s -buildid=" -o /final/mihomo .; \
     fi
+
+COPY entrypoint.sh /final/entrypoint.sh
+RUN chmod +x /final/entrypoint.sh /final/mihomo
 
 # Финальный образ
 FROM alpine:latest
 ARG TARGETARCH
+COPY --from=builder /final /
 RUN if [ "$TARGETARCH" = "arm64" ] || [ "$TARGETARCH" = "amd64" ]; then \
-        apk update && \
         apk add --no-cache ca-certificates tzdata iptables iptables-legacy nftables; \
-        rm -vrf /var/cache/apk/* && \
-        rm -f /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore && \
-        ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables && \
-        ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save && \
-        ln -s /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore; \
     elif [ "$TARGETARCH" = "arm" ]; then \
-        apk update && \
-        apk add --no-cache ca-certificates tzdata iptables iptables-legacy && \
-        rm -vrf /var/cache/apk/* && \
-        rm -f /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore && \
-        ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables && \
-        ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save && \
-        ln -s /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore; \
+        apk add --no-cache ca-certificates tzdata iptables iptables-legacy; \
     else \
         echo "Unsupported architecture: $TARGETARCH" && exit 1; \
+    fi && \
+    rm -f /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore && \
+    ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables && \
+    ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save && \
+    ln -s /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore;
     fi
-
-COPY --from=builder /out/mihomo /mihomo
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
