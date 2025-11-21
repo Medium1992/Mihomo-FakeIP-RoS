@@ -1,5 +1,22 @@
 #!/bin/sh
 FAKE_IP_RANGE="${FAKE_IP_RANGE:-198.18.0.0/15}"
+FAKE_IP_FILTER="${FAKE_IP_FILTER:-}"
+#   NAMESERVER_POLICY="domain1#dns1,domain2#dns2"
+generate_nameserver_policy() {
+  [ -z "${NAMESERVER_POLICY:-}" ] && return
+  echo "  nameserver-policy:"
+  OLDIFS=$IFS
+  IFS=','
+  for raw in $NAMESERVER_POLICY; do
+    item=$(printf '%s' "$raw" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    [ -z "$item" ] && continue
+    domain=${item%%#*}
+    dns=${item#*#}
+    printf "    '%s': '%s'\n" "$domain" "$dns"
+  done
+  IFS=$OLDIFS
+}
+
 config_file_mihomo_tproxy() {
 cat > /root/.config/mihomo/config.yaml << EOF
 log-level: ${LOGLEVEL:-error}
@@ -17,7 +34,11 @@ dns:
     - 9.9.9.9
     - 1.1.1.1
   enhanced-mode: fake-ip
-  fake-ip-range: ${FAKE_IP_RANGE}
+  fake-ip-range: ${FAKE_IP_RANGE}${FAKE_IP_FILTER:+
+  fake-ip-filter:}${FAKE_IP_FILTER:+$(printf '\n    - %s' $(echo "$FAKE_IP_FILTER" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$'))}
+EOF
+generate_nameserver_policy >>  /root/.config/mihomo/config.yaml
+cat >> /root/.config/mihomo/config.yaml <<EOF
   nameserver:
     - https://dns.google/dns-query
     - https://cloudflare-dns.com/dns-query
@@ -56,7 +77,11 @@ dns:
     - 9.9.9.9
     - 1.1.1.1
   enhanced-mode: fake-ip
-  fake-ip-range: ${FAKE_IP_RANGE}
+  fake-ip-range: ${FAKE_IP_RANGE}${FAKE_IP_FILTER:+
+  fake-ip-filter:}${FAKE_IP_FILTER:+$(printf '\n    - %s' $(echo "$FAKE_IP_FILTER" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$'))}
+EOF
+generate_nameserver_policy >>  /root/.config/mihomo/config.yaml
+cat >> /root/.config/mihomo/config.yaml <<EOF
   nameserver:
     - https://dns.google/dns-query
     - https://cloudflare-dns.com/dns-query
