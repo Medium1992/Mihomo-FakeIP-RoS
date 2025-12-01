@@ -21,36 +21,6 @@ RUN echo "Updating version.go with TAG=${TAG}-fakeip-ros and BUILDTIME=${BUILDTI
     sed -i "s|Version\s*=.*|Version = \"${TAG}-fakeip-ros\"|" constant/version.go && \
     sed -i "s|BuildTime\s*=.*|BuildTime = \"${BUILDTIME}\"|" constant/version.go
 
-# --- Добавляем helper-файл в пакет dns ---
-RUN cat > dns/envttl.go <<'EOF'
-package dns
-
-import (
-  "os"
-  "strconv"
-)
-
-func fakeipTTL() int {
-  if v := os.Getenv("TTL_FAKEIP"); v != "" {
-    if i, err := strconv.Atoi(v); err == nil && i > 0 {
-      return i
-    }
-  }
-  return 1
-}
-EOF
-
-# --- Патчим middleware.go: setMsgTTL(msg, 1) -> setMsgTTL(msg, uint32(fakeipTTL())) ---
-RUN awk 'BEGIN{done=0} { \
-  if(!done && $0 ~ /setMsgTTL\([[:space:]]*msg,[[:space:]]*1[[:space:]]*\)/){ \
-    sub(/setMsgTTL\([[:space:]]*msg,[[:space:]]*1[[:space:]]*\)/, "setMsgTTL(msg, uint32(fakeipTTL()))"); done=1 \
-  } \
-  print \
-} END { if(done==0){ exit 1 } }' dns/middleware.go > /tmp/mw.go && \
-    mv /tmp/mw.go dns/middleware.go && \
-    grep -q 'setMsgTTL(msg, uint32(fakeipTTL()))' dns/middleware.go
-
-  
 # Формируем список build tags и собираем
 RUN BUILD_TAGS="" && \
     if [ "$WITH_GVISOR" = "1" ]; then BUILD_TAGS="with_gvisor"; fi && \
