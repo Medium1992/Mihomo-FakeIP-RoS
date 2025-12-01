@@ -1,6 +1,28 @@
 #!/bin/sh
+
+if ! lsmod | grep nf_tables >/dev/null 2>&1; then
+  if ! apk info -e iptables iptables-legacy >/dev/null 2>&1; then
+    echo "Install iptables"
+    apk add iptables iptables-legacy >/dev/null 2>&1
+    rm -f /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore
+    ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables
+    ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save
+    ln -s /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore
+  fi
+else
+  if ! apk info -e nftables >/dev/null 2>&1; then
+    echo "Install nftables"
+    apk add nftables >/dev/null 2>&1
+  fi
+  if apk info -e iptables iptables-legacy >/dev/null 2>&1; then
+    echo "Delete iptables"
+    apk del iptables iptables-legacy >/dev/null 2>&1
+  fi
+fi
+
 FAKE_IP_RANGE="${FAKE_IP_RANGE:-198.18.0.0/15}"
 FAKE_IP_FILTER="${FAKE_IP_FILTER:-}"
+FAKE_IP_TTL="${FAKE_IP_TTL:-1}"
 #   NAMESERVER_POLICY="domain1#dns1,domain2#dns2"
 generate_nameserver_policy() {
   [ -z "${NAMESERVER_POLICY:-}" ] && return
@@ -15,6 +37,10 @@ generate_nameserver_policy() {
     printf "    '%s': '%s'\n" "$domain" "$dns"
   done
   IFS=$OLDIFS
+}
+
+first_iface() {
+  ip -o link show | awk -F': ' '/link\/ether/ {print $2}' | cut -d'@' -f1 | head -n1
 }
 
 config_file_mihomo_tproxy() {
@@ -34,7 +60,8 @@ dns:
     - 9.9.9.9
     - 1.1.1.1
   enhanced-mode: fake-ip
-  fake-ip-range: ${FAKE_IP_RANGE}${FAKE_IP_FILTER:+
+  fake-ip-range: ${FAKE_IP_RANGE}
+  fake-ip-ttl: ${FAKEIP_TTL}${FAKE_IP_FILTER:+
   fake-ip-filter:}${FAKE_IP_FILTER:+$(printf '\n    - %s' $(echo "$FAKE_IP_FILTER" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$'))}
 EOF
 generate_nameserver_policy >>  /root/.config/mihomo/config.yaml
@@ -77,7 +104,8 @@ dns:
     - 9.9.9.9
     - 1.1.1.1
   enhanced-mode: fake-ip
-  fake-ip-range: ${FAKE_IP_RANGE}${FAKE_IP_FILTER:+
+  fake-ip-range: ${FAKE_IP_RANGE}
+  fake-ip-ttl: ${FAKEIP_TTL}${FAKE_IP_FILTER:+
   fake-ip-filter:}${FAKE_IP_FILTER:+$(printf '\n    - %s' $(echo "$FAKE_IP_FILTER" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$'))}
 EOF
 generate_nameserver_policy >>  /root/.config/mihomo/config.yaml
@@ -99,7 +127,7 @@ listeners:
     - 0.0.0.0:53
     auto-detect-interface: false
     include-interface:
-    - $(ip -o link show | awk -F': ' '/link\/ether/ {print $2}' | cut -d'@' -f1 | head -n1)
+      - $(first_iface)
     auto-route: true
     strict-route: true
     auto-redirect: true
@@ -120,9 +148,9 @@ nft -f - <<EOF
 table inet mihomo_tproxy {
     chain prerouting {
         type filter hook prerouting priority filter; policy accept;
-        ip daddr ${FAKE_IP_RANGE} meta l4proto { tcp, udp } meta mark set 0x00000001 tproxy ip to 127.0.0.1:12345 accept
+        ip daddr ${FAKE_IP_RANGE} meta l4proto { tcp, udp } iifname "$(first_iface)" meta mark set 0x00000001 tproxy ip to 127.0.0.1:12345 accept
         ip daddr { $(ip -4 addr show $(ip -o link show | awk -F': ' '/link\/ether/ {print $2}' | cut -d'@' -f1 | head -n1) | grep inet | awk '{ print $2 }' | cut -d/ -f1), 0.0.0.0/8, 127.0.0.0/8, 224.0.0.0/4, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 192.0.0.0/24, 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24, 192.88.99.0/24, 198.18.0.0/15, 224.0.0.0/3 } return
-        meta l4proto { tcp, udp } meta mark set 0x00000001 tproxy ip to 127.0.0.1:12345 accept
+        meta l4proto { tcp, udp } iifname "$(first_iface)" meta mark set 0x00000001 tproxy ip to 127.0.0.1:12345 accept
     }
 
     chain divert {
