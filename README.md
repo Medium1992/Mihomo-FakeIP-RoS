@@ -30,14 +30,14 @@ Customize these environment variables as needed to control the fake IP behavior 
 | Variable       | Description                              | Example Value       |
 |----------------|------------------------------------------|---------------------|
 | FAKE_IP_RANGE  | Pool of addresses used for fake IPs      | 198.18.0.0/15       |
-| TTL_FAKEIP     | TTL for fake IP entries                  | 1                   |
+| FAKE_IP_TTL    | TTL for fake IP entries                  | 1                   |
 | LOGLEVEL       | Log level for mihomo                     | silent              |
 
 ```bash
 /container/envs
 add key=FAKE_IP_RANGE list=fakeip value=198.18.0.0/15
 add key=LOGLEVEL list=fakeip value=silent
-add key=TTL_FAKEIP list=fakeip value=1
+add key=FAKE_IP_TTL list=fakeip value=1
 ```
 
 ### 5. Pull and run the container
