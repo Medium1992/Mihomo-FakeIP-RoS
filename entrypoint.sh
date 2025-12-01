@@ -61,7 +61,7 @@ dns:
     - 1.1.1.1
   enhanced-mode: fake-ip
   fake-ip-range: ${FAKE_IP_RANGE}
-  fake-ip-ttl: ${FAKEIP_TTL}${FAKE_IP_FILTER:+
+  fake-ip-ttl: ${FAKE_IP_TTL}${FAKE_IP_FILTER:+
   fake-ip-filter:}${FAKE_IP_FILTER:+$(printf '\n    - %s' $(echo "$FAKE_IP_FILTER" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$'))}
 EOF
 generate_nameserver_policy >>  /root/.config/mihomo/config.yaml
@@ -105,7 +105,7 @@ dns:
     - 1.1.1.1
   enhanced-mode: fake-ip
   fake-ip-range: ${FAKE_IP_RANGE}
-  fake-ip-ttl: ${FAKEIP_TTL}${FAKE_IP_FILTER:+
+  fake-ip-ttl: ${FAKE_IP_TTL}${FAKE_IP_FILTER:+
   fake-ip-filter:}${FAKE_IP_FILTER:+$(printf '\n    - %s' $(echo "$FAKE_IP_FILTER" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$'))}
 EOF
 generate_nameserver_policy >>  /root/.config/mihomo/config.yaml
