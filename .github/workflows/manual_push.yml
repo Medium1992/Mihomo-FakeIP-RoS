@@ -105,6 +105,24 @@ jobs:
             medium1992/mihomo-fakeip-ros:amd64v2
             medium1992/mihomo-fakeip-ros:${{ env.VERSION }}-amd64v2
 
+        # 8. Сборка и пуш AMD64_v4
+      - name: Build and push mihomo AMD64_v4
+        uses: docker/build-push-action@v4
+        with:
+          context: ./
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            TAG=${{ env.VERSION }}
+            BUILDTIME=${{ env.BUILDTIME }}
+            AMD64VERSION=v4
+          tags: |
+            ghcr.io/medium1992/mihomo-fakeip-ros:amd64v4
+            ghcr.io/medium1992/mihomo-fakeip-ros:${{ env.VERSION }}-amd64v4
+            medium1992/mihomo-fakeip-ros:amd64v4
+            medium1992/mihomo-fakeip-ros:${{ env.VERSION }}-amd64v4
+
       # 9. Сборка и пуш multi-arch (AMD64_v3) + latest
       - name: Build and push mihomo multi-arch
         uses: docker/build-push-action@v4
